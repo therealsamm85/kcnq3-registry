@@ -1,0 +1,40 @@
+name: Validate registry submissions
+
+# Runs on every PR. Validates every line in data/registry.jsonl against
+# the schema v1 contract + the PHI-pattern scanner. Blocks merge on any
+# failure.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "data/registry.jsonl"
+      - "scripts/**"
+      - ".github/workflows/validate-pr.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate JSONL + PHI scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PR
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run aggregator self-tests (catches schema drift)
+        run: python3 scripts/test_aggregator.py
+
+      - name: Validate every line in registry.jsonl
+        run: python3 scripts/validate_registry.py
+
+      - name: Summary
+        if: success()
+        run: echo "✅ All submissions valid."

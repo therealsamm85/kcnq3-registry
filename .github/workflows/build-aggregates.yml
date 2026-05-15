@@ -1,0 +1,51 @@
+name: Build aggregates on merge
+
+# After a PR merges to main, regenerate releases/v1/aggregates.json so
+# the desktop app can fetch the updated cohort statistics.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "data/registry.jsonl"
+      - "scripts/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  aggregate:
+    name: Rebuild aggregates.json
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run aggregator self-tests
+        run: python3 scripts/test_aggregator.py
+
+      - name: Validate registry (paranoia — already gated on PR)
+        run: python3 scripts/validate_registry.py
+
+      - name: Build aggregates
+        run: python3 scripts/build_aggregates.py
+
+      - name: Commit updated aggregates if changed
+        run: |
+          if git diff --quiet releases/v1/aggregates.json; then
+            echo "No change in aggregates."
+          else
+            git config user.name "kcnq3-registry-bot"
+            git config user.email "noreply@github.com"
+            git add releases/v1/aggregates.json
+            git commit -m "Rebuild aggregates after merge"
+            git push
+          fi
