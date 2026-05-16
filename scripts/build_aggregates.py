@@ -81,10 +81,29 @@ STAGE_KEYS = ("WAKE", "N1", "N2", "N3", "REM")
 
 # Categorical (count distributions).
 CATEGORICAL_FIELDS: tuple[str, ...] = (
+    # v1 fields
     "csws_criterion_met",        # bool → "true"/"false"
     "spindle_interpretation",
     "activation_label",
     "quality_grade",
+    # v2 coupling fields
+    "coupling_plv_bucket",
+    "coupling_preferred_phase_octant",
+    "coupling_n_events_bucket",
+    "coupling_rayleigh_significant",  # bool → "true"/"false"
+    # v2 slow-wave fields
+    "sw_density_bucket",
+    "sw_mean_ptp_bucket",
+    "sw_method",
+    # v2 HFO fields
+    "hfo_rate_bucket",
+    "hfo_available",              # bool → "true"/"false"
+    # v2 IED fields
+    "ied_method",
+    "ied_rate_bucket",
+    "ied_nrem_rate_bucket",
+    "ied_age_flag",
+    "ied_agreement_bucket",
 )
 
 

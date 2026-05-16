@@ -49,9 +49,12 @@ def validate_submission(obj: Any) -> tuple[bool, list[str]]:
 
     # ── Field-by-field ─────────────────────────────────────────────────
     sv = obj["schema_version"]
-    if sv != _schema.SCHEMA_VERSION:
+    # Accept schema_version 1 (legacy) and 2 (current) — additive bump.
+    _VALID_SCHEMA_VERSIONS = {1, 2}
+    if sv not in _VALID_SCHEMA_VERSIONS:
         errors.append(
-            f"schema_version is {sv}, expected {_schema.SCHEMA_VERSION}"
+            f"schema_version is {sv}, expected one of "
+            f"{sorted(_VALID_SCHEMA_VERSIONS)}"
         )
 
     if not _schema._is_uuid(obj["submission_id"]):
@@ -157,12 +160,17 @@ def _validate_recording(r: Any) -> list[str]:
 
 def _validate_findings(f: Any) -> list[str]:
     """Every key must be in the allowlist; every value must match its
-    type/range. Unknown keys are rejected outright (forward strictness)."""
+    type/range. Unknown keys are rejected outright (forward strictness).
+
+    v1 keys and v2 keys are both included in the allowlist — any submission
+    (v1 or v2) may contain either subset. New v2 keys are all optional.
+    """
     errs: list[str] = []
     if not isinstance(f, dict):
         return ["findings must be an object"]
 
-    allowed_keys = {
+    # v1 scalar fields
+    allowed_keys: dict[str, Any] = {
         "background_pdr_hz": _schema._is_finite,
         "csws_criterion_met": lambda v: isinstance(v, bool),
         "csws_threshold_pct": _schema._is_pct,
@@ -178,12 +186,46 @@ def _validate_findings(f: Any) -> list[str]:
             lambda v: isinstance(v, int) and 0 <= v <= 100
         ),
         "quality_grade": lambda v: v in _schema.QUALITY_GRADES,
+        # v2 scalar fields (all optional)
+        "coupling_plv_bucket": (
+            lambda v: v in _schema.PLV_BUCKETS
+        ),
+        "coupling_preferred_phase_octant": (
+            lambda v: v in _schema.PHASE_OCTANTS
+        ),
+        "coupling_n_events_bucket": (
+            lambda v: v in _schema.COUPLED_EVENTS_BUCKETS
+        ),
+        "coupling_rayleigh_significant": lambda v: isinstance(v, bool),
+        "sw_density_bucket": (
+            lambda v: v in _schema.SW_DENSITY_BUCKETS
+        ),
+        "sw_mean_ptp_bucket": (
+            lambda v: v in _schema.SW_PTP_BUCKETS
+        ),
+        "sw_method": lambda v: v in ("yasa", "heuristic"),
+        "hfo_rate_bucket": (
+            lambda v: v in _schema.HFO_RATE_BUCKETS
+        ),
+        "hfo_available": lambda v: isinstance(v, bool),
+        "hfo_pct_on_spike_bucket": (
+            lambda v: v in ("<10", "10-50", "50-90", ">90")
+        ),
+        # v0.13.3 — IED detection (all optional)
+        "ied_method": lambda v: v in _schema.IED_METHODS,
+        "ied_rate_bucket": lambda v: v in _schema.IED_RATE_BUCKETS,
+        "ied_age_flag": lambda v: v in _schema.IED_AGE_FLAGS,
+        "ied_agreement_bucket": lambda v: v in _schema.IED_AGREEMENT_BUCKETS,
+        "ied_n_rolandic_benign_bucket": (
+            lambda v: v in _schema.IED_ROLANDIC_BUCKETS
+        ),
+        "ied_nrem_rate_bucket": lambda v: v in _schema.IED_NREM_RATE_BUCKETS,
     }
 
-    extra = set(f.keys()) - (
-        set(allowed_keys.keys())
-        | {"swi_pct_by_stage", "sleep_stages_pct", "spindle_age_norm_range"}
-    )
+    # Keys handled by dedicated sub-validators (excluded from unknown-key check)
+    _complex_keys = {"swi_pct_by_stage", "sleep_stages_pct", "spindle_age_norm_range"}
+
+    extra = set(f.keys()) - (set(allowed_keys.keys()) | _complex_keys)
     if extra:
         errs.append(f"findings has unknown keys: {sorted(extra)}")
 

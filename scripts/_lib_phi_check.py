@@ -85,9 +85,31 @@ _MAX_STRING_LEN = 80
 # schema). The PHI scanner skips them — a uuid will contain digit runs
 # that look phone-like or MRN-like otherwise, and the dedicated regex
 # is the real authority on that field.
+#
+# Also skip findings paths whose values are drawn from controlled
+# bucket vocabularies defined in schema.py. These strings (e.g. "0.2-0.35",
+# "[-180,-135)") can trip the numeric-date regex despite being safe
+# controlled-vocabulary entries. The deid.py extractor is the real
+# authority on these values; they are never free text.
 _SKIP_PATHS = frozenset({
     "$.submission_id",
     "$.intervention.linked_pre_submission_id",
+    # Schema v2 bucket fields — controlled vocabulary, validated in deid.py
+    "$.findings.coupling_plv_bucket",
+    "$.findings.coupling_preferred_phase_octant",
+    "$.findings.coupling_n_events_bucket",
+    "$.findings.sw_density_bucket",
+    "$.findings.sw_mean_ptp_bucket",
+    "$.findings.sw_method",
+    "$.findings.hfo_rate_bucket",
+    "$.findings.hfo_pct_on_spike_bucket",
+    # v0.13.3 — IED detection bucket fields (controlled vocabulary)
+    "$.findings.ied_method",
+    "$.findings.ied_rate_bucket",
+    "$.findings.ied_age_flag",
+    "$.findings.ied_agreement_bucket",
+    "$.findings.ied_n_rolandic_benign_bucket",
+    "$.findings.ied_nrem_rate_bucket",
 })
 
 

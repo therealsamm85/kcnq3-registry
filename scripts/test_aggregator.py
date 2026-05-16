@@ -267,6 +267,224 @@ check("R230His produces ≥1 published cell", len(his_cells) >= 1)
 check("R230Leu produces ≥1 published cell", len(leu_cells) >= 1)
 
 
+# ═══════════════════════════════════════════════════════════════════════
+section("Schema v2: v2 submission validates standalone")
+
+def _mk_sub_v2(
+    *,
+    gene: str = "KCNQ3",
+    protein: str = "p.Arg230His",
+    age_bucket: str = "5-7",
+    sex: str = "F",
+    pdr: float | None = 8.0,
+    coupling_plv_bucket: str | None = "0.2-0.35",
+    coupling_preferred_phase_octant: str | None = "[0,45)",
+    coupling_n_events_bucket: str | None = "10-50",
+    coupling_rayleigh_significant: bool | None = True,
+    sw_density_bucket: str | None = "15-30",
+    sw_mean_ptp_bucket: str | None = "75-150",
+    sw_method: str | None = "yasa",
+    hfo_rate_bucket: str | None = "1-5",
+    hfo_available: bool | None = True,
+    ied_method: str | None = "ensemble_heuristic",
+    ied_rate_bucket: str | None = "1-5",
+    ied_nrem_rate_bucket: str | None = "5-15",
+    ied_age_flag: str | None = "ok",
+    ied_agreement_bucket: str | None = "75-90",
+) -> dict:
+    """Construct a v2 submission with Tier-2 fields."""
+    findings: dict = {}
+    if pdr is not None:
+        findings["background_pdr_hz"] = pdr
+    findings["csws_criterion_met"] = False
+    if coupling_plv_bucket is not None:
+        findings["coupling_plv_bucket"] = coupling_plv_bucket
+    if coupling_preferred_phase_octant is not None:
+        findings["coupling_preferred_phase_octant"] = coupling_preferred_phase_octant
+    if coupling_n_events_bucket is not None:
+        findings["coupling_n_events_bucket"] = coupling_n_events_bucket
+    if coupling_rayleigh_significant is not None:
+        findings["coupling_rayleigh_significant"] = coupling_rayleigh_significant
+    if sw_density_bucket is not None:
+        findings["sw_density_bucket"] = sw_density_bucket
+    if sw_mean_ptp_bucket is not None:
+        findings["sw_mean_ptp_bucket"] = sw_mean_ptp_bucket
+    if sw_method is not None:
+        findings["sw_method"] = sw_method
+    if hfo_rate_bucket is not None:
+        findings["hfo_rate_bucket"] = hfo_rate_bucket
+    if hfo_available is not None:
+        findings["hfo_available"] = hfo_available
+    if ied_method is not None:
+        findings["ied_method"] = ied_method
+    if ied_rate_bucket is not None:
+        findings["ied_rate_bucket"] = ied_rate_bucket
+    if ied_nrem_rate_bucket is not None:
+        findings["ied_nrem_rate_bucket"] = ied_nrem_rate_bucket
+    if ied_age_flag is not None:
+        findings["ied_age_flag"] = ied_age_flag
+    if ied_agreement_bucket is not None:
+        findings["ied_agreement_bucket"] = ied_agreement_bucket
+
+    return {
+        "submission_id": str(uuid.uuid4()),
+        "schema_version": 2,
+        "submitted_at_month": "2026-05",
+        "consent": {"version": 1, "given": True, "given_at_month": "2026-05"},
+        "subject": {
+            "variant_gene": gene,
+            "variant_protein": protein,
+            "variant_type": "missense_GoF",
+            "age_years_bucket": age_bucket,
+            "sex": sex,
+        },
+        "recording": {
+            "duration_hours_bucket": "12-24",
+            "had_sleep": True,
+            "montage": "10-20_monopolar",
+            "n_channels": 19,
+        },
+        "findings": findings,
+        "intervention": None,
+        "tool_version": "0.13.3",
+    }
+
+
+# Test 1: v2 submission validates standalone
+s_v2 = _mk_sub_v2()
+ok_v2, errs_v2 = validate_submission(s_v2)
+check("v2 submission validates standalone", ok_v2, "; ".join(errs_v2))
+
+
+# ═══════════════════════════════════════════════════════════════════════
+section("Schema v2: v1 submission validates standalone (legacy back-compat)")
+
+s_v1 = _mk_sub(pdr=8.0)
+ok_v1, errs_v1 = validate_submission(s_v1)
+check("v1 submission validates standalone (legacy)", ok_v1, "; ".join(errs_v1))
+
+
+# ═══════════════════════════════════════════════════════════════════════
+section("Schema v2: mixed v1+v2 in same registry → both aggregate")
+
+# 5 v1 + 5 v2 → mixed cell should have n=10
+mixed_subs = (
+    [_mk_sub(pdr=8.0) for _ in range(5)]
+    + [_mk_sub_v2(pdr=9.0) for _ in range(5)]
+)
+agg_mixed = aggregate(mixed_subs, k_min=5)
+finest_mixed = [c for c in agg_mixed["cells"]
+                if c["cell"]["level"] == "gene_protein_age_sex"]
+check("mixed v1+v2: finest cell present with n=10",
+      len(finest_mixed) == 1 and finest_mixed[0]["n"] == 10)
+# PDR mean should be 8.5 (average of 8.0 and 9.0 across 10 submissions)
+stat_pdr = finest_mixed[0]["stats"].get("background_pdr_hz", {})
+check("mixed v1+v2: PDR mean is 8.5",
+      abs(stat_pdr.get("mean", 0) - 8.5) < 0.001)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+section("Schema v2: coupling_plv_bucket distribution appears when n≥5")
+
+subs_plv = [_mk_sub_v2(coupling_plv_bucket="0.2-0.35") for _ in range(5)]
+agg_plv = aggregate(subs_plv, k_min=5)
+finest_plv = next(c for c in agg_plv["cells"]
+                  if c["cell"]["level"] == "gene_protein_age_sex")
+plv_dist = finest_plv["categorical"].get("coupling_plv_bucket", {})
+check("coupling_plv_bucket distribution present when n=5",
+      "0.2-0.35" in plv_dist)
+check("coupling_plv_bucket count is 5",
+      plv_dist.get("0.2-0.35") == 5)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+section("Schema v2: ied_method distribution appears when n≥5")
+
+subs_ied = [_mk_sub_v2(ied_method="ensemble_heuristic") for _ in range(5)]
+agg_ied = aggregate(subs_ied, k_min=5)
+finest_ied = next(c for c in agg_ied["cells"]
+                  if c["cell"]["level"] == "gene_protein_age_sex")
+ied_dist = finest_ied["categorical"].get("ied_method", {})
+check("ied_method distribution present when n=5",
+      "ensemble_heuristic" in ied_dist)
+check("ied_method count is 5", ied_dist.get("ensemble_heuristic") == 5)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+section("Schema v2: hfo_rate_bucket distribution appears when n≥5")
+
+subs_hfo = [_mk_sub_v2(hfo_rate_bucket="1-5") for _ in range(5)]
+agg_hfo = aggregate(subs_hfo, k_min=5)
+finest_hfo = next(c for c in agg_hfo["cells"]
+                  if c["cell"]["level"] == "gene_protein_age_sex")
+hfo_dist = finest_hfo["categorical"].get("hfo_rate_bucket", {})
+check("hfo_rate_bucket distribution present when n=5",
+      "1-5" in hfo_dist)
+check("hfo_rate_bucket count is 5", hfo_dist.get("1-5") == 5)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+section("Schema v2: sw_density_bucket distribution appears when n≥5")
+
+subs_sw = [_mk_sub_v2(sw_density_bucket="15-30") for _ in range(5)]
+agg_sw = aggregate(subs_sw, k_min=5)
+finest_sw = next(c for c in agg_sw["cells"]
+                 if c["cell"]["level"] == "gene_protein_age_sex")
+sw_dist = finest_sw["categorical"].get("sw_density_bucket", {})
+check("sw_density_bucket distribution present when n=5",
+      "15-30" in sw_dist)
+check("sw_density_bucket count is 5", sw_dist.get("15-30") == 5)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+section("Schema v2: coupling_rayleigh_significant bool counts true/false")
+
+subs_rayleigh = (
+    [_mk_sub_v2(coupling_rayleigh_significant=True) for _ in range(3)]
+    + [_mk_sub_v2(coupling_rayleigh_significant=False) for _ in range(2)]
+)
+agg_ray = aggregate(subs_rayleigh, k_min=5)
+finest_ray = next(c for c in agg_ray["cells"]
+                  if c["cell"]["level"] == "gene_protein_age_sex")
+ray_dist = finest_ray["categorical"].get("coupling_rayleigh_significant", {})
+check("coupling_rayleigh_significant: true count is 3",
+      ray_dist.get("true") == 3)
+check("coupling_rayleigh_significant: false count is 2",
+      ray_dist.get("false") == 2)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+section("Schema v2: hfo_available bool counts true/false")
+
+subs_hfo_avail = (
+    [_mk_sub_v2(hfo_available=True) for _ in range(4)]
+    + [_mk_sub_v2(hfo_available=False) for _ in range(1)]
+)
+agg_hfa = aggregate(subs_hfo_avail, k_min=5)
+finest_hfa = next(c for c in agg_hfa["cells"]
+                  if c["cell"]["level"] == "gene_protein_age_sex")
+hfa_dist = finest_hfa["categorical"].get("hfo_available", {})
+check("hfo_available: true count is 4", hfa_dist.get("true") == 4)
+check("hfo_available: false count is 1", hfa_dist.get("false") == 1)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+section("Schema v2: mixed-version PDR aggregate spans all v1+v2 submissions")
+
+# 3 v1 with pdr=7.0 and 7 v2 with pdr=9.0 → mean = (3*7 + 7*9)/10 = 8.4
+mixed10 = (
+    [_mk_sub(pdr=7.0) for _ in range(3)]
+    + [_mk_sub_v2(pdr=9.0) for _ in range(7)]
+)
+agg_m10 = aggregate(mixed10, k_min=5)
+finest_m10 = next(c for c in agg_m10["cells"]
+                  if c["cell"]["level"] == "gene_protein_age_sex")
+pdr_m10 = finest_m10["stats"].get("background_pdr_hz", {})
+check("mixed-version PDR mean = 8.4",
+      abs(pdr_m10.get("mean", 0) - 8.4) < 0.001)
+check("mixed-version PDR n = 10", pdr_m10.get("n") == 10)
+
+
 # ─── Final ──────────────────────────────────────────────────────────────
 print(f"\n{'='*60}")
 print(f"  PASS: {n_pass}")
