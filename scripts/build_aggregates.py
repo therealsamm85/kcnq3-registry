@@ -98,12 +98,14 @@ CATEGORICAL_FIELDS: tuple[str, ...] = (
     # v2 HFO fields
     "hfo_rate_bucket",
     "hfo_available",              # bool → "true"/"false"
+    "hfo_pct_on_spike_bucket",
     # v2 IED fields
     "ied_method",
     "ied_rate_bucket",
     "ied_nrem_rate_bucket",
     "ied_age_flag",
     "ied_agreement_bucket",
+    "ied_n_rolandic_benign_bucket",
 )
 
 
@@ -277,6 +279,10 @@ def aggregate(submissions: list[dict], k_min: int | None = None) -> dict:
         json.dumps(c["cell"], sort_keys=True),
     ))
 
+    # NOTE: aggregate envelope version is independent of submission schema version.
+    # `schema_version: 1` here refers to the aggregate output format (cell layout,
+    # stat shape), which is stable across submission schemas v1 and v2. The
+    # `n_submissions` field can be a mix of v1+v2 records.
     return {
         "schema_version": 1,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(

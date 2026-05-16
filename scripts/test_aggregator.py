@@ -485,6 +485,100 @@ check("mixed-version PDR mean = 8.4",
 check("mixed-version PDR n = 10", pdr_m10.get("n") == 10)
 
 
+# ═══════════════════════════════════════════════════════════════════════
+section("v2 new fields: hfo_pct_on_spike_bucket distribution appears when n≥5")
+
+def _mk_sub_v2_hfo_pct(bucket: str) -> dict:
+    s = _mk_sub_v2(hfo_rate_bucket="1-5", hfo_available=True)
+    s["findings"]["hfo_pct_on_spike_bucket"] = bucket
+    return s
+
+subs_hpoc = [_mk_sub_v2_hfo_pct("10-50") for _ in range(5)]
+agg_hpoc = aggregate(subs_hpoc, k_min=5)
+finest_hpoc = next(c for c in agg_hpoc["cells"]
+                   if c["cell"]["level"] == "gene_protein_age_sex")
+hpoc_dist = finest_hpoc["categorical"].get("hfo_pct_on_spike_bucket", {})
+check("hfo_pct_on_spike_bucket distribution present when n=5",
+      "10-50" in hpoc_dist)
+check("hfo_pct_on_spike_bucket count is 5",
+      hpoc_dist.get("10-50") == 5)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+section("v2 new fields: ied_n_rolandic_benign_bucket distribution appears when n≥5")
+
+def _mk_sub_v2_rolandic(bucket: str) -> dict:
+    s = _mk_sub_v2()
+    s["findings"]["ied_n_rolandic_benign_bucket"] = bucket
+    return s
+
+subs_rol = [_mk_sub_v2_rolandic("small") for _ in range(5)]
+agg_rol = aggregate(subs_rol, k_min=5)
+finest_rol = next(c for c in agg_rol["cells"]
+                  if c["cell"]["level"] == "gene_protein_age_sex")
+rol_dist = finest_rol["categorical"].get("ied_n_rolandic_benign_bucket", {})
+check("ied_n_rolandic_benign_bucket distribution present when n=5",
+      "small" in rol_dist)
+check("ied_n_rolandic_benign_bucket count is 5",
+      rol_dist.get("small") == 5)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+section("k-anonymity: n=4 v2 new fields → categorical dict empty")
+
+subs_v2_4 = [_mk_sub_v2_hfo_pct(">90") for _ in range(4)]
+agg_v2_4 = aggregate(subs_v2_4, k_min=5)
+finest_v2_4 = [c for c in agg_v2_4["cells"]
+               if c["cell"]["level"] == "gene_protein_age_sex"]
+check("n=4 v2 new fields → no finest-level cell published",
+      len(finest_v2_4) == 0)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+section("schema_version validation: 3 rejected with 'schema_version' in error")
+
+s_sv3 = _mk_sub(pdr=8.0)
+s_sv3["schema_version"] = 3
+ok_sv3, errs_sv3 = validate_submission(s_sv3)
+check("schema_version=3 rejected",
+      not ok_sv3)
+check("schema_version=3 error mentions 'schema_version'",
+      any("schema_version" in e for e in errs_sv3))
+
+
+# ═══════════════════════════════════════════════════════════════════════
+section("schema_version validation: null rejected")
+
+s_svnull = _mk_sub(pdr=8.0)
+s_svnull["schema_version"] = None
+ok_svnull, errs_svnull = validate_submission(s_svnull)
+check("schema_version=null rejected", not ok_svnull)
+check("schema_version=null error mentions 'schema_version'",
+      any("schema_version" in e for e in errs_svnull))
+
+
+# ═══════════════════════════════════════════════════════════════════════
+section("schema_version validation: string '2' rejected")
+
+s_svstr = _mk_sub(pdr=8.0)
+s_svstr["schema_version"] = "2"
+ok_svstr, errs_svstr = validate_submission(s_svstr)
+check("schema_version='2' (string) rejected", not ok_svstr)
+check("schema_version='2' error mentions 'schema_version'",
+      any("schema_version" in e for e in errs_svstr))
+
+
+# ═══════════════════════════════════════════════════════════════════════
+section("Dual-accept contract: v1 submission carrying v2 field is accepted")
+
+s_v1_with_v2 = _mk_sub(pdr=8.0)
+s_v1_with_v2["schema_version"] = 1
+s_v1_with_v2["findings"]["coupling_plv_bucket"] = "0.2-0.35"
+ok_dual, errs_dual = validate_submission(s_v1_with_v2)
+check("v1 submission with v2 field 'coupling_plv_bucket' is accepted",
+      ok_dual, "; ".join(errs_dual))
+
+
 # ─── Final ──────────────────────────────────────────────────────────────
 print(f"\n{'='*60}")
 print(f"  PASS: {n_pass}")

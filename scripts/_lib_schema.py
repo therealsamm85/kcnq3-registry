@@ -166,6 +166,10 @@ SW_PTP_BUCKETS: tuple[str, ...] = ("<75", "75-150", "150-250", ">250")
 
 HFO_RATE_BUCKETS: tuple[str, ...] = ("0", "<1", "1-5", "5-15", ">15")
 
+HFO_PCT_ON_SPIKE_BUCKETS: tuple[str, ...] = ("<10", "10-50", "50-90", ">90")
+
+SW_METHODS: frozenset[str] = frozenset({"yasa", "heuristic"})
+
 # v0.13.3 — IED detection fields (additive in schema v2).
 IED_METHODS: frozenset[str] = frozenset({
     "external_spikenet", "ensemble_heuristic", "unavailable",

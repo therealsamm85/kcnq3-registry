@@ -203,13 +203,13 @@ def _validate_findings(f: Any) -> list[str]:
         "sw_mean_ptp_bucket": (
             lambda v: v in _schema.SW_PTP_BUCKETS
         ),
-        "sw_method": lambda v: v in ("yasa", "heuristic"),
+        "sw_method": lambda v: v in _schema.SW_METHODS,
         "hfo_rate_bucket": (
             lambda v: v in _schema.HFO_RATE_BUCKETS
         ),
         "hfo_available": lambda v: isinstance(v, bool),
         "hfo_pct_on_spike_bucket": (
-            lambda v: v in ("<10", "10-50", "50-90", ">90")
+            lambda v: v in _schema.HFO_PCT_ON_SPIKE_BUCKETS
         ),
         # v0.13.3 — IED detection (all optional)
         "ied_method": lambda v: v in _schema.IED_METHODS,
