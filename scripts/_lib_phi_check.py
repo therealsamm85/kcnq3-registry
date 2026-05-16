@@ -24,11 +24,15 @@ Patterns checked
 
 This list is conservative on purpose: we'd rather block a legitimate
 submission and have the family adjust than leak something.
+
+Note: this file is synced from kcnq3-lens/src/registry/phi_check.py.
+Do not edit it directly — edit the source and re-sync (Track B).
 """
 
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Any
 
 
@@ -69,6 +73,15 @@ _PAT_PATH = re.compile(r"(?:[A-Za-z]:[\\/]|/)[\w./\\-]{4,}")
 _PAT_NAME_LIKE = re.compile(
     r"\b[A-Z][a-z]{1,}\s+[A-Z][a-z]{1,}\b"
 )
+
+# US SSN: NNN-NN-NNNN (with explicit dashes)
+_PAT_SSN_US = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
+
+# German Versicherungsnummer: letter + 9 digits (coarse heuristic)
+_PAT_DE_INSURANCE = re.compile(r"\b[A-Z]\d{9}\b")
+
+# IBAN-like: 2 letters + 2 digits + 11-30 alphanumeric (rough)
+_PAT_IBAN = re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b")
 
 # Common name-y connectors in narrative free text
 _PAT_NARRATIVE = re.compile(
@@ -148,24 +161,49 @@ def _scan_string(s: str, path: str) -> list[str]:
             f"({len(s)} chars) — free-text not allowed"
         )
 
-    if _PAT_ISO_DATE.search(s):
+    # B1: Normalize to NFKC before regex scans so that Unicode homoglyphs
+    # (e.g. Cyrillic А U+0410 → A) are collapsed to their ASCII equivalents
+    # before pattern matching. The original string is still used for the
+    # length check above; patterns run on the normalized copy.
+    s_norm = unicodedata.normalize("NFKC", s)
+
+    if _PAT_ISO_DATE.search(s_norm):
         found.append(f"{path}: contains ISO date 'YYYY-MM-DD'")
-    if _PAT_NUMERIC_DATE.search(s):
+    if _PAT_NUMERIC_DATE.search(s_norm):
         found.append(f"{path}: contains numeric date (DMY/MDY)")
-    if _PAT_EMAIL.search(s):
+    if _PAT_EMAIL.search(s_norm):
         found.append(f"{path}: contains email-like pattern")
-    if _PAT_LONG_NUMBER.search(s):
+    if _PAT_LONG_NUMBER.search(s_norm):
         found.append(f"{path}: contains 7+ consecutive digits")
-    if _PAT_PHONE.search(s):
+    if _PAT_PHONE.search(s_norm):
         found.append(f"{path}: contains phone-like pattern")
-    if _PAT_PATH.search(s):
+    if _PAT_PATH.search(s_norm):
         found.append(f"{path}: contains file path pattern")
-    if _PAT_NAME_LIKE.search(s):
+    if _PAT_NAME_LIKE.search(s_norm):
         found.append(f"{path}: contains 'Capitalized Capitalized' "
                      f"sequence (name-like)")
-    if _PAT_NARRATIVE.search(s):
+    if _PAT_NARRATIVE.search(s_norm):
         found.append(f"{path}: contains narrative free text "
                      f"('my child' / 'patient' / ...)")
+    # B2: Additional government/financial identifier patterns
+    if _PAT_SSN_US.search(s_norm):
+        found.append(f"{path}: contains US SSN pattern (NNN-NN-NNNN)")
+    if _PAT_DE_INSURANCE.search(s_norm):
+        found.append(f"{path}: contains German insurance-number-like pattern")
+    if _PAT_IBAN.search(s_norm):
+        found.append(f"{path}: contains IBAN-like pattern")
+
+    # B1 (additional): Flag non-ASCII letters as potential homoglyph PHI.
+    # NFKC normalisation handles compatibility forms (e.g. fullwidth A→A) but
+    # not confusable script letters (e.g. Cyrillic А U+0410). Any non-ASCII
+    # letter in a free-text field is suspicious — allowed characters in our
+    # schema are controlled-vocabulary ASCII tokens only.
+    if any(unicodedata.category(c).startswith("L") and ord(c) >= 128
+           for c in s):
+        found.append(
+            f"{path}: contains non-ASCII letter(s) — possible homoglyph "
+            f"encoding or non-Latin script; ASCII-only required"
+        )
 
     return found
 
