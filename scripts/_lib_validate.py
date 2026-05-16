@@ -20,6 +20,9 @@ from typing import Any
 from . import _lib_schema as _schema
 from . import _lib_phi_check as phi_check
 
+# Module-level constant for external drift-detection tests.
+_VALID_SCHEMA_VERSIONS: frozenset[int] = frozenset({1, 2})
+
 
 def validate_submission(obj: Any) -> tuple[bool, list[str]]:
     """Top-level entry point."""
@@ -49,9 +52,10 @@ def validate_submission(obj: Any) -> tuple[bool, list[str]]:
 
     # ── Field-by-field ─────────────────────────────────────────────────
     sv = obj["schema_version"]
-    # Accept schema_version 1 (legacy) and 2 (current) — additive bump.
-    _VALID_SCHEMA_VERSIONS = {1, 2}
-    if sv not in _VALID_SCHEMA_VERSIONS:
+    # Accept schema_version 1 (legacy) and 2 (current) — must be int, not float.
+    # Note: Python's `1.0 in {1, 2}` is True, so we check type explicitly.
+    # (Constant is defined at module level for drift-detection tests.)
+    if not isinstance(sv, int) or isinstance(sv, bool) or sv not in _VALID_SCHEMA_VERSIONS:
         errors.append(
             f"schema_version is {sv}, expected one of "
             f"{sorted(_VALID_SCHEMA_VERSIONS)}"

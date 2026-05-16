@@ -579,6 +579,76 @@ check("v1 submission with v2 field 'coupling_plv_bucket' is accepted",
       ok_dual, "; ".join(errs_dual))
 
 
+# ═══════════════════════════════════════════════════════════════════════
+section("C10 — aggregate([], k_min=5) → empty cells list, no crash")
+
+try:
+    agg_empty = aggregate([], k_min=5)
+    check("aggregate([]) returns a dict", isinstance(agg_empty, dict))
+    check("aggregate([]) cells is empty list", agg_empty.get("cells") == [])
+    check("aggregate([]) n_submissions is 0",
+          agg_empty.get("n_submissions") == 0)
+    check("aggregate([]) n_cells_published is 0",
+          agg_empty.get("n_cells_published") == 0)
+except Exception as e:
+    check("aggregate([]) does not crash", False, str(e))
+
+
+# ═══════════════════════════════════════════════════════════════════════
+section("C10 — aggregate([single_sub], k_min=5) → fully suppressed (n=1 < 5)")
+
+try:
+    _single = _mk_sub(pdr=8.0)
+    agg_one = aggregate([_single], k_min=5)
+    check("aggregate([1 sub]) returns a dict", isinstance(agg_one, dict))
+    check("aggregate([1 sub]) all cells suppressed (n_cells_published=0)",
+          agg_one.get("n_cells_published") == 0)
+    check("aggregate([1 sub]) cells list is empty", agg_one.get("cells") == [])
+    check("aggregate([1 sub]) n_submissions is 1",
+          agg_one.get("n_submissions") == 1)
+except Exception as e:
+    check("aggregate([1 sub]) does not crash", False, str(e))
+
+
+# ═══════════════════════════════════════════════════════════════════════
+section("C10 — schema_version edge cases in _lib_validate")
+
+from scripts._lib_validate import _VALID_SCHEMA_VERSIONS as _VSV
+
+# schema_version=1.0 (float) — Python hash equality would normally pass
+# but our validator now does isinstance(sv, int) check.
+_sv_float_s = _mk_sub(pdr=8.0)
+_sv_float_s["schema_version"] = 1.0
+_ok_f, _errs_f = validate_submission(_sv_float_s)
+check("schema_version=1.0 (float) rejected by registry validator",
+      not _ok_f,
+      f"errors: {_errs_f}")
+
+# schema_version=-1
+_sv_neg_s = _mk_sub(pdr=8.0)
+_sv_neg_s["schema_version"] = -1
+_ok_n, _errs_n = validate_submission(_sv_neg_s)
+check("schema_version=-1 rejected by registry validator",
+      not _ok_n,
+      f"errors: {_errs_n}")
+
+# schema_version=999999
+_sv_big_s = _mk_sub(pdr=8.0)
+_sv_big_s["schema_version"] = 999999
+_ok_b, _errs_b = validate_submission(_sv_big_s)
+check("schema_version=999999 rejected by registry validator",
+      not _ok_b,
+      f"errors: {_errs_b}")
+
+# _VALID_SCHEMA_VERSIONS module constant is accessible
+check("_VALID_SCHEMA_VERSIONS module constant is a frozenset",
+      isinstance(_VSV, frozenset))
+check("_VALID_SCHEMA_VERSIONS contains 1 and 2",
+      1 in _VSV and 2 in _VSV)
+check("_VALID_SCHEMA_VERSIONS does NOT contain 3",
+      3 not in _VSV)
+
+
 # ─── Final ──────────────────────────────────────────────────────────────
 print(f"\n{'='*60}")
 print(f"  PASS: {n_pass}")
