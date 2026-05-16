@@ -11,7 +11,7 @@ otherwise take decades to surface in the published literature.
 
 ## How it works
 
-1. A family runs [KCNQ3-Lens](https://github.com/your-org/kcnq3-lens)
+1. A family runs [KCNQ3-Lens](https://github.com/therealsamm85/kcnq3-lens)
    on a recording.
 2. The app produces a quantitative findings JSON (locally, no upload).
 3. The family clicks **Contribute** → the de-identification builder
@@ -46,7 +46,7 @@ public, version-controlled JSONL file. Every submission is auditable.
   To withdraw: open an issue with the id; the maintainer removes the
   line in the next merge.
 
-See `data/consent_v1.md` for the consent text families must affirm.
+See `data/consent_v2.md` for the current consent text families must affirm (v1 archived for reference).
 
 ## Schema
 
